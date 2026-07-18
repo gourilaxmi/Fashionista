@@ -88,11 +88,11 @@ python -m data.run_dataset
 python -m scripts.run_indexing --images data/images --out outputs/index
 
 # 3. Query
-python -m scripts.run_query --index outputs/index \
+python -m scripts.run_query --index data/index \
   --query "A red tie and a white shirt in a formal setting" --k 5
 
 # 4. Run the assignment's 5 evaluation queries end-to-end
-python -m eval.eval_queries --index outputs/index --images data/images
+python -m eval.eval_queries --index data/index --images data/images
 ```
 
 ## Dataset source

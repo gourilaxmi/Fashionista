@@ -1,5 +1,7 @@
 data/images/*
+data/index/*
 !data/images/.gitkeep
+!data/index/.gitkeep
 outputs/samples/*
 !outputs/samples/.gitkeep
 outputs/index/*

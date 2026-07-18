@@ -7,8 +7,8 @@ from retriever import retrieve
 EVAL_QUERIES = [
     "A person in a bright yellow raincoat.",
     "Professional business attire inside a modern office.",
-    "Someone wearing a blue shirt sitting on a park bench.",
     "Casual weekend outfit for a city walk.",
+    "Someone wearing a blue shirt sitting on a park bench.",
     "A red tie and a white shirt in a formal setting.",
 ]
 

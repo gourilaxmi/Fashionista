@@ -22,6 +22,13 @@ assert set(config.SCENE_KEYWORDS) == set(config.SCENE_PROMPTS), (
 )
 _SCENE_KEYWORDS = config.SCENE_KEYWORDS
 
+_STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "for", "with",
+    "of", "to", "is", "are", "was", "were", "be", "being", "been", "this",
+    "that", "these", "those", "it", "its", "as", "by", "from", "into",
+    "someone", "person", "wearing", "wears", "wear",
+}
+
 
 def _find_garment_color_pairs(text: str) -> List[Tuple[str, Optional[str]]]:
     pairs = []
@@ -66,6 +73,11 @@ def parse_query(query: str) -> ParsedQuery:
 
     residual = re.sub(r"\s+", " ", residual).strip(" .,")
 
-    vibe = residual if len(residual.split()) >= 1 else None
+    # Drop stopwords from the residual itself and use them as the vibe signal only if there's any meaningful text left. 
+    meaningful_tokens = [
+        tok for tok in re.findall(r"[a-zA-Z']+", residual.lower())
+        if tok not in _STOPWORDS
+    ]
+    vibe = " ".join(meaningful_tokens) if meaningful_tokens else None
 
     return ParsedQuery(garment_attrs=garment_attrs, scene=scene, vibe=vibe, raw_query=query)
