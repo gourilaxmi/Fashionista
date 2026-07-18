@@ -4,6 +4,13 @@ from typing import List, Optional, Tuple
 
 import data.config as config
 
+try:
+    from rapidfuzz import process, fuzz
+    _HAS_RAPIDFUZZ = True
+except ImportError:
+    import difflib
+    _HAS_RAPIDFUZZ = False
+
 
 @dataclass
 class ParsedQuery:
@@ -28,6 +35,57 @@ _STOPWORDS = {
     "that", "these", "those", "it", "its", "as", "by", "from", "into",
     "someone", "person", "wearing", "wears", "wear",
 }
+
+_FUZZY_THRESHOLD = 82  # 0-100 similarity
+
+
+def _normalize_plural(token: str) -> str:
+    # Convert plural -> singular
+    if token in config.GARMENT_VOCAB:
+        return token
+    if token.endswith("ies") and len(token) > 4:
+        return token[:-3] + "y"
+    if token.endswith(("shes", "ches", "sses", "xes")):
+        return token[:-2]
+    if token.endswith("s") and not token.endswith("ss") and token[:-1] in config.GARMENT_VOCAB:
+        return token[:-1]
+    return token
+
+
+def _fuzzy_match(token: str, vocab: List[str]) -> Optional[str]:
+    # Return the closest vocab term if within threshold, else None.
+    if not token or len(token) < 3:
+        return None
+    if _HAS_RAPIDFUZZ:
+        match = process.extractOne(token, vocab, scorer=fuzz.ratio)
+        if match and match[1] >= _FUZZY_THRESHOLD:
+            return match[0]
+        return None
+    else:
+        close = difflib.get_close_matches(token, vocab, n=1, cutoff=_FUZZY_THRESHOLD / 100)
+        return close[0] if close else None
+
+
+def _canonicalize_tokens(text: str) -> str:
+    """Normalize plurals + typo-tolerant fuzzy match, word by word,
+    for garment and color vocabulary only. Leaves everything else untouched."""
+    words = re.findall(r"[a-zA-Z\-']+|\s+|[^\sa-zA-Z\-']", text)
+    out = []
+    for w in words:
+        lw = w.lower()
+        if not lw.strip() or not re.match(r"^[a-zA-Z\-']+$", lw):
+            out.append(w)
+            continue
+
+        canon = _normalize_plural(lw)
+
+        if canon not in config.GARMENT_VOCAB and canon not in config.COLOR_PALETTE:
+            fuzzy_g = _fuzzy_match(lw, _GARMENT_SORTED)
+            fuzzy_c = _fuzzy_match(lw, _COLOR_SORTED) if not fuzzy_g else None
+            canon = fuzzy_g or fuzzy_c or canon
+
+        out.append(canon)
+    return "".join(out)
 
 
 def _find_garment_color_pairs(text: str) -> List[Tuple[str, Optional[str]]]:
@@ -58,10 +116,13 @@ def _find_scene(text: str) -> Optional[str]:
 
 
 def parse_query(query: str) -> ParsedQuery:
-    garment_attrs = _find_garment_color_pairs(query)
-    scene = _find_scene(query)
+    # canonicalize before matching: fixes plurals and typos in one pass
+    normalized_query = _canonicalize_tokens(query)
 
-    residual = query
+    garment_attrs = _find_garment_color_pairs(normalized_query)
+    scene = _find_scene(normalized_query)
+
+    residual = normalized_query
     for garment, color in garment_attrs:
         residual = re.sub(rf"\b{re.escape(garment)}\b", "", residual, flags=re.I)
         if color:
@@ -73,7 +134,6 @@ def parse_query(query: str) -> ParsedQuery:
 
     residual = re.sub(r"\s+", " ", residual).strip(" .,")
 
-    # Drop stopwords from the residual itself and use them as the vibe signal only if there's any meaningful text left. 
     meaningful_tokens = [
         tok for tok in re.findall(r"[a-zA-Z']+", residual.lower())
         if tok not in _STOPWORDS
