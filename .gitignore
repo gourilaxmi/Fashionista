@@ -1,0 +1,40 @@
+data/images/*
+!data/images/.gitkeep
+outputs/samples/*
+!outputs/samples/.gitkeep
+outputs/index/*
+!outputs/index/.gitkeep
+__pycache__/
+*.pyc
+data/_cache/
+*.pth
+logs/*
+!logs/.gitkeep
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs and editors
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+*.pt
+*.pth
+*.pkl
+*.h5
+*.onnx
+models/checkpoints/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
