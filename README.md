@@ -26,6 +26,38 @@ At query time, the query is parsed into slots (garment+colour pairs / scene /
 vibe). Only populated slots contribute to the fused score, so a
 colour-only query doesn't get diluted by an empty scene signal.
 
+### Query preprocessing
+
+Before slot parsing, each token is canonicalized against the garment/colour
+vocabulary in three passes:
+
+1. **Plural normalization** -- "shirts" -> "shirt", "dresses" -> "dress" --
+   only applied when the singular form is already in `GARMENT_VOCAB`, so
+   words like "jeans" are left untouched.
+2. **Typo tolerance** -- if a token doesn't exactly match the garment/colour
+   vocabulary after normalization, it's fuzzy-matched against both
+   (`rapidfuzz` if installed, otherwise falls back to stdlib `difflib`
+   automatically, threshold 82/100) so "shrit" or "grey" still resolve
+   correctly.
+3. **Everything else is untouched** -- stopwords, scene keywords, and the
+   colour-proximity window (used to bind a colour to the nearest preceding
+   garment mention) are unaffected by this step.
+
+Garment/colour synonym expansion (e.g. "tee" -> "t-shirt") was intentionally
+**not** included -- the vocabulary derived from `categories.json` already
+covers the target garment set closely enough that a synonym layer added
+complexity without a measurable precision gain on the eval queries.
+
+### Garment + colour pair fusion
+
+Multi-attribute queries (e.g. "red tie" + "white shirt") are combined per
+image as an **average over only the pairs that had at least one candidate
+match** for that image -- a pair with zero matching instances is excluded
+from the average rather than forced to a hard 0. This keeps the AND-style
+intuition (an image needs matches across the populated pairs to score well)
+while softening the penalty for genuinely rare multi-garment combinations,
+compared to a strict zero-filled average.
+
 Retrieval is currently single-stage: the fused score above ranks the whole
 corpus directly. A stage-2 re-verification pass (re-running Grounding DINO
 against only the shortlist to double-check compositional binding on
@@ -63,12 +95,16 @@ glance-fashion-retrieval/
 │   └── build_index.py          # orchestrates the full indexing pipeline
 ├── retriever/
 │   ├── query_parser.py         # query -> {garment_attrs, scene, vibe} slots
-│   └── search.py                # stage-1 retrieval + adaptive fusion
+│   │                            # (plural normalization + fuzzy matching)
+│   ├── search.py                # stage-1 retrieval + adaptive fusion
+│   └── __init__.py              # retrieve() / retrieve_with_images() /
+│                                 # save_results_plot() entrypoints
 ├── scripts/
 │   ├── run_indexing.py         # CLI entrypoint: build the index
 │   └── run_query.py            # CLI entrypoint: run a single query
 ├── eval/
 │   └── eval_queries.py         # runs the 5 assignment eval queries
+├── results/                    # saved query result plots (git-ignored)
 ├── requirements.txt
 └── README.md
 ```
@@ -93,6 +129,20 @@ python -m scripts.run_query --index data/index \
 
 # 4. Run the assignment's 5 evaluation queries end-to-end
 python -m eval.eval_queries --index data/index --images data/images
+```
+
+### Saving retrieved results as images
+
+`retriever/__init__.py` also exposes `save_results_plot()`, which renders the
+retrieved images with matplotlib (non-interactive `Agg` backend, so it works
+headlessly in a script) and writes a `.png` to `results/` instead of relying
+on an interactive `plt.show()`:
+
+```python
+from retriever import retrieve_with_images, save_results_plot
+
+parsed, resolved = retrieve_with_images(query, index_dir, images_dir, top_k=5)
+save_results_plot(query, resolved)  # -> results/<query>.png
 ```
 
 ## Dataset source
